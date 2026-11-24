@@ -361,7 +361,7 @@ endforeach()
 if(NOT DVBDAB_FUZZ)
 
 foreach(t test_edi_input test_dabplus_decoder test_pad_rds test_ts_output test_data_limits test_ensemble_changes
-          test_logos)
+          test_logos test_no_fic)
     add_executable(${t} tests/${t}.cpp)
     target_link_libraries(${t} dvbdab)
     add_test(NAME ${t} COMMAND ${t})

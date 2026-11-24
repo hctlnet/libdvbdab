@@ -354,8 +354,9 @@ bool DABStreamParser::decode_deti(const uint8_t* val, size_t len) {
         edi_.m_fc.tsta = 0xFFFFFF;
     }
 
+    // (a frame without FIC has none: not the one of a frame before)
+    edi_.fic_length = fic_length;
     if (edi_.m_fc.ficf) {
-        edi_.fic_length = fic_length;
         std::copy(val + i, val + i + fic_length, edi_.fic.data());
         i += fic_length;
     }
@@ -397,14 +398,18 @@ bool DABStreamParser::assemble_eti_frame() {
 }
 
 bool DABStreamParser::assemble_eti_frame(bool partial, uint64_t invalid_scids, bool fic_fresh) {
-    if (!edi_.is_eti || !edi_.m_fc_valid || !edi_.fic_length) {
+    // A frame may come without FIC (FICF 0: a feed to transmitters that make
+    // the FIC themselves) - then it has streams, or it is nothing
+    if (!edi_.is_eti || !edi_.m_fc_valid ||
+        (edi_.m_fc.ficf ? !edi_.fic_length : edi_.m_fc.nst == 0)) {
         LOG_DEBUG(STREAM, "assemble_eti skip: is_eti=" << edi_.is_eti
                  << " fc_valid=" << edi_.m_fc_valid << " fic_len=" << (int)edi_.fic_length);
         return false;
     }
 
-    if ((edi_.m_fc.mid == 3 && edi_.fic_length != 32 * 4) ||
-        (edi_.m_fc.mid != 3 && edi_.fic_length != 24 * 4)) {
+    if (edi_.m_fc.ficf &&
+        ((edi_.m_fc.mid == 3 && edi_.fic_length != 32 * 4) ||
+         (edi_.m_fc.mid != 3 && edi_.fic_length != 24 * 4))) {
         LOG_WARN(STREAM, "ETI FIC length mismatch: mid=" << edi_.m_fc.mid << " fic_len=" << (int)edi_.fic_length);
         return false;
     }

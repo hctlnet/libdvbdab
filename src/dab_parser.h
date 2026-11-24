@@ -24,6 +24,9 @@
  * - FIG 1/0: Ensemble label
  * - FIG 1/1: Service label
  *
+ * An ensemble whose frames have no FIC (FICF 0 - a feed to transmitters that
+ * make the FIC themselves) is told by its streams: see process_no_fic().
+ *
  * References:
  *   ETSI EN 300 401 - DAB system specification
  *   ETSI EN 300 799 - ETI (Ensemble Transport Interface)
@@ -200,6 +203,28 @@ private:
 
     void build_ensemble();
     void drop_stale();
+
+    // An ensemble without FIC: what each stream of the frames carries, by its
+    // first bytes over a window of frames (process_no_fic())
+    struct NoFicStream {
+        int stl = 0;             // length in a frame, 64 bit words
+        int sad = 0;             // start address and TPL of the stream characterization
+        int tpl = 0;
+        int64_t seen = 0;        // the frame it was last in
+        int frames = 0;          // frames of this window
+        int mp2_48 = 0;          // ... that start with a Layer II header of 48 kHz and the stream's bitrate
+        int mp2_24[2] = {0, 0};  // ... of 24 kHz (an audio frame takes two), by the frame count modulo 2
+        int fire[5] = {0, 0, 0, 0, 0};  // ... that start a DAB+ superframe, by the frame count modulo 5
+        int kind = -1;           // -1: not known yet, else NO_FIC_NONE, _DAB, _DABPLUS
+        int other = -1;          // what the last window said when it was not `kind`
+    };
+    enum { NO_FIC_NONE = 0, NO_FIC_DAB = 1, NO_FIC_DABPLUS = 2 };
+    static constexpr int NO_FIC_WINDOW = 50;   // frames (1.2 s) to tell what a stream is
+    std::map<int, NoFicStream> no_fic_;
+    int64_t no_fic_frame_ = 0;
+    void process_no_fic(const uint8_t* frame, size_t len, const ETI_FC& fc);
+    static int no_fic_kind(const NoFicStream& s);
+    void build_no_fic_ensemble();
 
     // FIC frames: the count, where each service and subchannel was last in
     // FIG 0/2 or 0/1, and when the first service came

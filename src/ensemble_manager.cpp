@@ -179,7 +179,8 @@ std::map<StreamKey, DABEnsemble> EnsembleManager::getAllEnsembles() const {
     for (const auto& [key, parser] : parsers_) {
         // a parser is made for every UDP destination seen: only the ones
         // whose FIC gave an ensemble id carry DAB (not some other data, and
-        // not a destination from a damaged header)
+        // not a destination from a damaged header) - or whose frames without
+        // FIC have audio streams (EID_NO_FIC)
         const DABEnsemble& ens = parser->get_ensemble();
         if (ens.eid != 0)
             result[key] = ens;

@@ -3,6 +3,20 @@
 What each version changed for a user of the library. The versions are the
 tags of the repository.
 
+## Not yet released
+
+Input
+- An ensemble that comes without its FIC (EDI or ETI frames with FICF 0: a
+  feed to transmitters that make the FIC themselves) is no longer nothing.
+  Its audio streams are told by how their frames start - the header of an
+  MPEG Layer II frame of the stream's bitrate (48 kHz, or every second frame
+  at 24 kHz), the Fire code of a DAB+ superframe - over 50 frames, and are
+  its services: the ensemble has the id `DVBDAB_EID_NO_FIC` (0xFFFF) and no
+  label, a service the id `DVBDAB_SID_NO_FIC_BASE` + SubChId and the label
+  "Service <SubChId>". Streams that carry no audio are no services. The
+  streams are read on: one that comes, goes or carries something else
+  changes the ensemble (`DVBDAB_HAVE_NO_FIC`).
+
 ## 2.8.0
 
 TS output

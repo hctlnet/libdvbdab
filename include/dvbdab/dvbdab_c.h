@@ -63,9 +63,18 @@ typedef struct {
     uint8_t pty;            /* Programme type (FIG 0/17, international code); 0 = none */
 } dvbdab_service_t;
 
+/* An ensemble that comes without its FIC (FICF 0 in every frame: a feed to
+ * transmitters that make the FIC themselves) has no ensemble id, no service
+ * ids and no labels. Its audio streams are told by how their frames start
+ * (MPEG Layer II header, DAB+ superframe) and are its services: the ensemble
+ * has this id and no label, a service the id DVBDAB_SID_NO_FIC_BASE +
+ * SubChId and the label "Service <SubChId>" (DVBDAB_HAVE_NO_FIC) */
+#define DVBDAB_EID_NO_FIC 0xFFFF
+#define DVBDAB_SID_NO_FIC_BASE 0x0100
+
 /* DAB ensemble info (C struct) */
 typedef struct {
-    uint16_t eid;           /* Ensemble ID */
+    uint16_t eid;           /* Ensemble ID (DVBDAB_EID_NO_FIC: it has no FIC) */
     char label[DVBDAB_LABEL_SIZE]; /* Ensemble label, UTF-8 */
     uint32_t source_ip;     /* Source multicast IP (0 for ETI-NA) */
     uint16_t source_port;   /* Source UDP port (0 for ETI-NA) */
@@ -215,6 +224,8 @@ typedef enum {
 /* dvbdab_streamer_set_logo_callback(): the logos of the services from the
  * programme guide of the ensemble (2.6.0 on) */
 #define DVBDAB_HAVE_LOGOS 1
+/* an ensemble without FIC: its audio streams as services, DVBDAB_EID_NO_FIC */
+#define DVBDAB_HAVE_NO_FIC 1
 #define DVBDAB_VERSION_MAJOR 2
 /* lost frames: DAB+ AUs of incomplete superframes, PTS with the gaps,
  * subchannels of EDI packets with lost fragments (2.1.0 on); the DAB+ output
@@ -334,7 +345,8 @@ void dvbdab_streamer_free_ensemble(dvbdab_ensemble_t *ensemble);
 /**
  * Get all discovered ensembles (for discovery mode with filter_ip=0).
  * Returns all ensembles found by the EnsembleManager with their actual IPs:
- * the UDP streams whose FIC gave an ensemble id (eid != 0), not other data.
+ * the UDP streams whose FIC gave an ensemble id (eid != 0) or that carry an
+ * ensemble without FIC (DVBDAB_EID_NO_FIC), not other data.
  * Caller must free with dvbdab_streamer_free_all_ensembles().
  * @param streamer Streamer handle
  * @param count    Output: number of ensembles returned

@@ -92,6 +92,12 @@ using AudioFrameCallback = std::function<void(const StreamKey& stream,
 using EnsembleFoundCallback = std::function<void(const DABEnsemble& ensemble)>;
 
 // ETI frame constants
+// An ensemble that comes without its FIC (a feed to transmitters that make
+// the FIC themselves) has no ensemble id, no service ids and no labels: its
+// audio sub-channels are its services, "Service <SubChId>", with these ids
+constexpr uint16_t EID_NO_FIC = 0xFFFF;        // DABEnsemble::eid
+constexpr uint32_t SID_NO_FIC_BASE = 0x0100;   // DABService::sid = base + SubChId
+
 constexpr size_t ETI_FRAME_SIZE = 6144;
 constexpr uint32_t ETI_FSYNC_ODD = 0xF8C549;   // Odd frames
 constexpr uint32_t ETI_FSYNC_EVEN = 0x073AB6;  // Even frames

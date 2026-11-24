@@ -54,6 +54,14 @@ C/C++ library for receiving DAB/DAB+ (Digital Audio Broadcasting) from DVB satel
   (`DVBDAB_FORMAT_IPV4`). Up to 1.x the formats `DVBDAB_FORMAT_MPE`, `_GSE`
   and `_BBF_TS` did it in the library; their numbers 1-3 stay unused.
 
+- **Ensembles without FIC**
+  - A feed to transmitters that make the FIC themselves (EDI or ETI frames
+    with FICF 0) has no ensemble id, no services and no labels. Its audio
+    streams are told by how their frames start (MPEG Layer II header, DAB+
+    superframe) and become its services: "Service <SubChId>" with the id
+    `DVBDAB_SID_NO_FIC_BASE` + SubChId, in an ensemble with the id
+    `DVBDAB_EID_NO_FIC` and no label; streams without audio are none
+
 - **Service information from the FIC**
   - Language of each service (FIG 0/5), programme type (FIG 0/17), country,
     local time offset and international table (FIG 0/9), date and time

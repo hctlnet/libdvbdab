@@ -104,6 +104,8 @@ void DABParser::reset() {
     utc_ms_ = 0;
     utc_frame_ = -1;
     utc_long_ = false;
+    no_fic_.clear();
+    no_fic_frame_ = 0;
 }
 
 bool DABParser::process_eti_frame(const uint8_t* frame, size_t len) {
@@ -129,7 +131,19 @@ bool DABParser::process_eti_frame(const uint8_t* frame, size_t len) {
     ETI_FC fc = parse_fc(frame + 4);
 
     if (fc.ficf == 0) {
+        // an ensemble that never had a FIC is told by its streams
+        if (fic_frame_ == 0) process_no_fic(frame, len, fc);
         return labelled_;
+    }
+    if (!no_fic_.empty()) {
+        // it has one now: what the streams told goes
+        no_fic_.clear();
+        if (ensemble_.eid == EID_NO_FIC) {
+            ensemble_ = DABEnsemble{};
+            basic_ready_ = false;
+            labelled_ = false;
+            revision_++;
+        }
     }
 
     int ficl = 24;
@@ -755,6 +769,187 @@ void DABParser::process_fig_1(const uint8_t* data, int len, int ext, int charset
             break;
         }
     }
+}
+
+// MPEG audio Layer II bitrates (kbit/s) by the index of the frame header:
+// MPEG-1 (48 kHz in DAB) and MPEG-2 LSF (24 kHz)
+static const int mp2_bitrates_48[16] = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
+static const int mp2_bitrates_24[16] = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0};
+
+// The sampling rate (kHz) of the DAB audio frame that starts here: an MPEG
+// Layer II header of 48 kHz (MPEG-1) or 24 kHz (MPEG-2 LSF) with the bitrate
+// of the sub-channel; 0: none
+static int mp2_frame_start(const uint8_t* d, int bitrate) {
+    if (d[0] != 0xFF || (d[1] & 0xF0) != 0xF0) return 0;   // syncword
+    if (((d[1] >> 1) & 3) != 2) return 0;                  // Layer II
+    if (((d[2] >> 2) & 3) != 1) return 0;                  // 48 kHz, or 24 kHz in LSF
+    int index = d[2] >> 4;
+    if (d[1] & 0x08) return mp2_bitrates_48[index] == bitrate ? 48 : 0;
+    return mp2_bitrates_24[index] == bitrate ? 24 : 0;
+}
+
+// The capacity units of a sub-channel by its bitrate and the TPL of its
+// stream characterization (EN 300 799: 0x10 + level - 1 for UEP, 0x20 +
+// set B * 4 + level - 1 for EEP); 0 when the two do not go together
+static int tpl_capacity_units(int tpl, int bitrate) {
+    if ((tpl & 0x38) == 0x10) {
+        for (int i = 0; i < 64; i++) {
+            if (uep_bitrates[i] == bitrate && uep_levels[i] == (tpl & 7) + 1) return uep_sizes[i];
+        }
+        return 0;
+    }
+    if ((tpl & 0x38) != 0x20) return 0;
+    static const int cu_a[4] = {12, 8, 6, 4};
+    static const int cu_b[4] = {27, 21, 18, 15};
+    if (tpl & 4) return bitrate % 32 ? 0 : bitrate / 32 * cu_b[tpl & 3];
+    return bitrate % 8 ? 0 : bitrate / 8 * cu_a[tpl & 3];
+}
+
+// What a window of frames says a stream carries: DAB audio when most frames
+// (every one at 48 kHz, every second one at 24 kHz) start with the header of
+// a Layer II frame of the stream's bitrate, DAB+ audio when most fifth frames
+// start a superframe (its Fire code), else no audio. "Most": frames that got
+// lost on the way must not turn an audio stream into none.
+int DABParser::no_fic_kind(const NoFicStream& s) {
+    if (s.frames < NO_FIC_WINDOW / 2) return NO_FIC_NONE;
+    if (s.mp2_48 * 5 >= s.frames * 3) return NO_FIC_DAB;
+    if (std::max(s.mp2_24[0], s.mp2_24[1]) * 10 >= s.frames * 3) return NO_FIC_DAB;
+    int fire = 0;
+    for (int n : s.fire) fire = std::max(fire, n);
+    if (fire * 25 >= s.frames * 3) return NO_FIC_DABPLUS;
+    return NO_FIC_NONE;
+}
+
+// An ensemble without FIC (FICF 0 in every frame: a feed to transmitters or
+// multiplexers that make the FIC themselves - 36E 12734H, EDI with eight
+// Layer II programmes and data streams). Nothing says what its streams are:
+// no ensemble, no services, no labels, and the start addresses of the stream
+// characterization need not be those of an ensemble. The streams themselves
+// tell the audio ones: a DAB audio frame starts every stream frame (48 kHz;
+// every second one at 24 kHz) with its MPEG header, a DAB+ superframe every
+// fifth with its Fire code. Each audio stream is a service, "Service
+// <SubChId>" with the id SID_NO_FIC_BASE + SubChId, of an ensemble with the
+// id EID_NO_FIC and no label; the other streams (data) are none. The streams
+// are read as long as the frames come: one that comes, goes, or carries
+// something else for two windows changes the ensemble.
+void DABParser::process_no_fic(const uint8_t* frame, size_t len, const ETI_FC& fc) {
+    size_t pos = 8 + size_t(fc.nst) * 4 + 4;   // the streams follow the header
+    if (pos > len) return;
+    no_fic_frame_++;
+
+    bool changed = false;
+    for (unsigned i = 0; i < fc.nst; i++) {
+        const uint8_t* stc = frame + 8 + i * 4;
+        int scid = stc[0] >> 2;
+        int stl = ((stc[2] & 0x03) << 8) | stc[3];
+        size_t size = size_t(stl) * 8;
+        if (pos + size > len) break;
+        const uint8_t* data = frame + pos;
+        pos += size;
+
+        NoFicStream& s = no_fic_[scid];
+        if (s.stl != stl) {
+            // new, or of another size: what it is must be told anew
+            changed = changed || s.kind > NO_FIC_NONE;
+            s = NoFicStream{};
+            s.stl = stl;
+        }
+        s.sad = ((stc[0] & 0x03) << 8) | stc[1];
+        s.tpl = stc[2] >> 2;
+        s.seen = no_fic_frame_;
+
+        // a stream of n times 8 kbit/s has 3 n words in a frame
+        int bitrate = stl % 3 ? 0 : stl * 8 / 3;
+        s.frames++;
+        if (bitrate && size >= 11) {
+            int rate = mp2_frame_start(data, bitrate);
+            if (rate == 48) s.mp2_48++;
+            if (rate == 24) s.mp2_24[fc.fct % 2]++;
+            bool zero = std::all_of(data, data + 11, [](uint8_t b) { return b == 0; });
+            if (!zero && firecode_check(data)) s.fire[fc.fct % 5]++;
+        }
+        if (s.frames < NO_FIC_WINDOW) continue;
+
+        int kind = no_fic_kind(s);
+        if (s.kind < 0 || kind == s.kind) {
+            changed = changed || s.kind < 0;
+            s.kind = kind;
+            s.other = -1;
+        } else if (kind == s.other) {
+            s.kind = kind;   // the second window that says so
+            s.other = -1;
+            changed = true;
+        } else {
+            s.other = kind;
+        }
+        s.frames = s.mp2_48 = s.mp2_24[0] = s.mp2_24[1] = 0;
+        std::fill(std::begin(s.fire), std::end(s.fire), 0);
+    }
+
+    // streams the frames no longer have
+    for (auto it = no_fic_.begin(); it != no_fic_.end();) {
+        if (no_fic_frame_ - it->second.seen > STALE_FRAMES) {
+            changed = changed || it->second.kind > NO_FIC_NONE;
+            it = no_fic_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (changed) build_no_fic_ensemble();
+}
+
+void DABParser::build_no_fic_ensemble() {
+    DABEnsemble e;
+    e.eid = EID_NO_FIC;
+    e.source_ip = ensemble_.source_ip;
+    e.source_port = ensemble_.source_port;
+
+    bool all_known = true;
+    for (const auto& [scid, s] : no_fic_) {
+        if (s.kind < 0) all_known = false;
+        if (s.kind <= NO_FIC_NONE) continue;
+        DABService svc;
+        svc.sid = SID_NO_FIC_BASE + static_cast<uint32_t>(scid);
+        svc.label = "Service " + std::to_string(scid);
+        svc.bitrate = s.stl * 8 / 3;
+        svc.subchannel_id = scid;
+        svc.start_addr = s.sad;
+        svc.subchannel_size = tpl_capacity_units(s.tpl, svc.bitrate);
+        svc.dabplus = s.kind == NO_FIC_DABPLUS;
+        if ((s.tpl & 0x38) == 0x10) {
+            svc.protection_level = (s.tpl & 7) + 1;
+        } else if ((s.tpl & 0x38) == 0x20) {
+            svc.protection_level = s.tpl & 7;
+            svc.eep_protection = true;
+        }
+        e.services.push_back(svc);
+    }
+    // not before every stream is told: the first ones would be an ensemble
+    // of their own for a moment
+    if (!all_known && ensemble_.eid != EID_NO_FIC) return;
+
+    if (e.services.empty()) {
+        // no audio in it (any more): no ensemble
+        if (ensemble_.eid == EID_NO_FIC) {
+            ensemble_ = DABEnsemble{};
+            ensemble_.source_ip = e.source_ip;
+            ensemble_.source_port = e.source_port;
+            basic_ready_ = false;
+            labelled_ = false;
+            revision_++;
+        }
+        return;
+    }
+    ensemble_ = std::move(e);
+    revision_++;
+    if (!basic_ready_) {
+        LOG_INFO(FIC, "DAB without FIC: " << ensemble_.services.size()
+                 << " audio streams of " << no_fic_.size() << " are its services");
+    }
+    // there is nothing more to wait for: no labels come
+    basic_ready_ = true;
+    labelled_ = true;
 }
 
 void DABParser::build_ensemble() {
