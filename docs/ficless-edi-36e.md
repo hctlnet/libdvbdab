@@ -69,7 +69,7 @@ format.)
 
 ### What the library makes of it
 
-Up to 2.8.0 nothing: frames without FIC were dropped. Now the audio streams
+Up to 2.8.0 nothing: frames without FIC were dropped. From 2.9.0 on the audio streams
 are told by how their frames start and are the services of an ensemble
 without FIC (`DVBDAB_EID_NO_FIC`): "Service 11" to "Service 18", the ids
 0x010B to 0x0112. The other five streams are no services. The transponder

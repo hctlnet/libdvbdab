@@ -3,7 +3,7 @@
 What each version changed for a user of the library. The versions are the
 tags of the repository.
 
-## Not yet released
+## 2.9.0
 
 Input
 - An ensemble that comes without its FIC (EDI or ETI frames with FICF 0: a

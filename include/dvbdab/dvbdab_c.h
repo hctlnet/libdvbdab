@@ -224,7 +224,8 @@ typedef enum {
 /* dvbdab_streamer_set_logo_callback(): the logos of the services from the
  * programme guide of the ensemble (2.6.0 on) */
 #define DVBDAB_HAVE_LOGOS 1
-/* an ensemble without FIC: its audio streams as services, DVBDAB_EID_NO_FIC */
+/* an ensemble without FIC: its audio streams as services, DVBDAB_EID_NO_FIC
+ * (2.9.0 on) */
 #define DVBDAB_HAVE_NO_FIC 1
 #define DVBDAB_VERSION_MAJOR 2
 /* lost frames: DAB+ AUs of incomplete superframes, PTS with the gaps,
@@ -233,7 +234,7 @@ typedef enum {
  * by their CRC, also of DAB, put out as RDS RadioText (2.3.0 on); the TS
  * with a PCR per service ahead of the PTS, PES by time, an SDT in sections
  * (2.4.0 on) */
-#define DVBDAB_VERSION_MINOR 8
+#define DVBDAB_VERSION_MINOR 9
 #define DVBDAB_VERSION_PATCH 0
 
 /* The version of the library that is linked, to compare with the macros
