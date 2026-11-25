@@ -406,10 +406,13 @@ struct TsScanner::Impl {
             partial_ts.assign(data + pos, data + len);
         }
 
-        // Check timeout
+        // Check timeout. A timeout of 0 takes the clock out: the scan then ends
+        // when all it found is read, or when the caller stops feeding - what a
+        // caller needs that reads a capture, faster or slower than real time
+        const bool clocked = timeout_ms != 0;
         auto elapsed = std::chrono::steady_clock::now() - start_time;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-        if (static_cast<unsigned int>(elapsed_ms) >= timeout_ms) {
+        if (clocked && static_cast<unsigned int>(elapsed_ms) >= timeout_ms) {
             done = true;
             return 1;
         }
@@ -435,7 +438,7 @@ struct TsScanner::Impl {
 
         // Early exit if no DAB found after 1 second
         // This avoids waiting for full timeout on streams with no DAB traffic
-        if (static_cast<unsigned int>(elapsed_ms) >= EARLY_EXIT_MS &&
+        if (clocked && static_cast<unsigned int>(elapsed_ms) >= EARLY_EXIT_MS &&
             etina_streaming_pids.empty() &&
             tsni_streaming_pids.empty()) {
             // No ETI-NA, no TSNI after 1 second - no DAB here

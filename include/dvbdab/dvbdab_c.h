@@ -129,7 +129,10 @@ void dvbdab_scanner_destroy(dvbdab_scanner_t *scanner);
 /**
  * Set scanner timeout.
  * @param scanner    Scanner handle
- * @param timeout_ms Timeout in milliseconds (default: 500)
+ * @param timeout_ms Timeout in milliseconds (default: 500). 0: no clock at all
+ *                   (DVBDAB_HAVE_SCANNER_NO_CLOCK) - the scan is done when all
+ *                   the ensembles it found are read, else it goes on as long as
+ *                   the caller feeds it; for callers that read a capture
  */
 void dvbdab_scanner_set_timeout(dvbdab_scanner_t *scanner, unsigned int timeout_ms);
 
@@ -227,6 +230,8 @@ typedef enum {
 /* an ensemble without FIC: its audio streams as services, DVBDAB_EID_NO_FIC
  * (2.9.0 on) */
 #define DVBDAB_HAVE_NO_FIC 1
+/* dvbdab_scanner_set_timeout(scanner, 0): a scan without a clock (2.9.1 on) */
+#define DVBDAB_HAVE_SCANNER_NO_CLOCK 1
 #define DVBDAB_VERSION_MAJOR 2
 /* lost frames: DAB+ AUs of incomplete superframes, PTS with the gaps,
  * subchannels of EDI packets with lost fragments (2.1.0 on); the DAB+ output
