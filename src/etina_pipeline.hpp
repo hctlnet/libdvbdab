@@ -19,7 +19,11 @@ constexpr size_t FRAMES_IN_MULTIFRAME = FRAMES_IN_BLOCK * BLOCKS_IN_SUPERBLOCK *
 constexpr size_t INTERLEAVE_ROWS = 8;
 constexpr size_t INTERLEAVE_COLS = 240;
 constexpr size_t ETI_NI_FRAME_SIZE = 6144;
-constexpr int OFFSET_DETECTION_PACKET_COUNT = 5;
+// The padding of a packet is the smallest count of leading 0xFF bytes over
+// this many packets. The data itself begins with 0xFF often (43 % of the
+// packets of an ensemble measured, up to 12 in a row): five packets gave a
+// wrong offset at 18 % of the places a scan could start
+constexpr int OFFSET_DETECTION_PACKET_COUNT = 32;
 
 // Step 1: Strip FF padding
 struct EtinaOffsetState {

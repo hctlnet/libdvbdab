@@ -3,6 +3,9 @@
 // and the frames come out unchanged, also when it arrives in small pieces (the
 // search then runs over many calls). Random data finds no sync, and the bytes
 // fed without sync are counted while the buffer stays bounded.
+//
+// And for the padding before it: data that itself begins with 0xFF in many
+// packets in a row is not taken for padding, with and without real padding.
 
 #include "../src/etina_pipeline.hpp"
 #include <cstdint>
@@ -67,8 +70,39 @@ static std::vector<uint8_t> feed(EtinaE1State& st, std::mt19937& rng,
     return out;
 }
 
+// The padding found in packets of `pad` bytes 0xFF and data, of which the
+// first `ff_run` packets have data that begins with 1-6 bytes 0xFF; -1 when
+// not all the data came out behind it
+static int detect_padding(std::mt19937& rng, int pad, int ff_run) {
+    EtinaOffsetState st;
+    size_t data_out = 0;
+    const int packets = 200;
+    for (int i = 0; i < packets; i++) {
+        std::vector<uint8_t> p(184);
+        for (auto& b : p) b = static_cast<uint8_t>(rng());
+        for (int k = 0; k < pad; k++) p[k] = 0xFF;
+        if (i < ff_run)
+            for (int k = 0; k < 1 + i % 6; k++) p[pad + k] = 0xFF;
+        else if (p[pad] == 0xFF)
+            p[pad] = 0x00;
+        size_t n = 0;
+        if (etina_strip_padding(st, p.data(), p.size(), n) != nullptr)
+            data_out += n;
+    }
+    // all packets after the detection give their data
+    const size_t want = static_cast<size_t>(packets - OFFSET_DETECTION_PACKET_COUNT + 1) *
+                        static_cast<size_t>(184 - pad);
+    return data_out == want ? st.detected_offset : -1;
+}
+
 int main() {
     std::mt19937 rng(20261116);
+
+    // an ensemble measured had data beginning with 0xFF in up to 12 packets in a row
+    check(detect_padding(rng, 0, 0) == 0, "no padding found where there is none");
+    check(detect_padding(rng, 0, 12) == 0, "data that begins with 0xFF in 12 packets in a row is no padding");
+    check(detect_padding(rng, 12, 0) == 12, "padding of 12 bytes found");
+    check(detect_padding(rng, 12, 12) == 12, "padding of 12 bytes found before data that begins with 0xFF");
     const size_t nframes = 64;
 
     int found = 0, total = 0;

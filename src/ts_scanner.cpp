@@ -25,6 +25,7 @@ struct PidState {
     int bbf_sync_count{0};       // Count of 0xB8 sync bytes seen (BBF detection)
     bool etina_candidate{false}; // True if no PUSI after threshold
     bool etina_checked{false};   // True if ETI-NA detection has been attempted
+    int etina_retries{0};        // Detections given up without sync, and begun anew
     std::unique_ptr<EtinaPipelineState> etina_pipeline;  // Modular ETI-NA pipeline
 
     // ETI-NA streaming state (after detection, parse FIC for ensemble discovery)
@@ -49,6 +50,7 @@ struct TsScanner::Impl {
 
     // ETI-NA detection results
     std::vector<EtiNaDetectionInfo> etina_results;
+    static constexpr int ETINA_RETRIES = 3;  // ETI-NA detections of a PID after the first gave up
     static constexpr int ETINA_PACKET_THRESHOLD = 100;  // Check for no-PUSI after this many packets
 
     // ETI-NA ensemble results (by PID)
@@ -352,10 +354,16 @@ struct TsScanner::Impl {
             if (state.etina_candidate && !state.etina_streaming &&
                 !state.etina_pipeline->e1.sync_found &&
                 state.etina_pipeline->e1.unsynced_bytes > 16384) {
-                // Too much data without producing ETI - not ETI-NA
+                // Too much data without producing ETI - not ETI-NA, or the
+                // padding was taken wrong: a few more tries from later packets
                 state.etina_candidate = false;
                 state.etina_pipeline.reset();
                 state.etina_fic_parser.reset();
+                if (state.etina_retries < ETINA_RETRIES) {
+                    state.etina_retries++;
+                    state.etina_checked = false;
+                    state.packet_count = 0;
+                }
             }
         }
     }
