@@ -3,6 +3,23 @@
 What each version changed for a user of the library. The versions are the
 tags of the repository.
 
+## 2.9.1
+
+Input
+- ETI-NA: the padding of a packet (the bytes 0xFF before its data) is taken
+  from 32 packets, not 5. The data itself begins with 0xFF often - in 43 %
+  of the packets of an ensemble measured, up to 12 in a row - and five such
+  packets gave a wrong padding: at about every seventh place a stream could
+  start, the scanner did not find that ensemble and the streamer gave no
+  output for it at all. A scanner that found no sync in a PID tries it
+  again, three times, from later packets.
+- A scanner without a clock: `dvbdab_scanner_set_timeout(scanner, 0)` takes
+  out both its timeout and its early end after a second without DAB. It is
+  done when the ensembles it found are read, else it goes on as long as it
+  is fed - what a caller needs that reads a capture, faster or slower than
+  real time (`DVBDAB_HAVE_SCANNER_NO_CLOCK`). A timeout of 0 ended the scan
+  with the first data before.
+
 ## 2.9.0
 
 Input

@@ -240,7 +240,7 @@ typedef enum {
  * with a PCR per service ahead of the PTS, PES by time, an SDT in sections
  * (2.4.0 on) */
 #define DVBDAB_VERSION_MINOR 9
-#define DVBDAB_VERSION_PATCH 0
+#define DVBDAB_VERSION_PATCH 1
 
 /* The version of the library that is linked, to compare with the macros
  * above (the version of the header the caller was built with): the
